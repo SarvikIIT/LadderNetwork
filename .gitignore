@@ -1,0 +1,33 @@
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Editors/IDE
+.vscode/
+.idea/
+.vs
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# C/C++ build artifacts
+*.exe
+*.o
+*.obj
+*.out
+*.ilk
+*.pdb
+build/
+dist/
+
+# Project-generated files
+Z.csv
+Y.csv
+ladder_network.png
+
+# Logs
+*.log
