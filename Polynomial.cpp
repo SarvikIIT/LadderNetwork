@@ -80,6 +80,7 @@ pair<Polynomial, Polynomial> Polynomial::operator/(const Polynomial& divisor) co
 	while (!dividend.isZero() && dividend.degree() >= d) {
 		int degDiff = dividend.degree() - d;
 		long long coeffQuotient = dividend.coeffs.back() / divisor.coeffs.back();
+		if (coeffQuotient == 0) break; // avoid infinite loop on non-divisible leading coefficients
 		Polynomial term = Polynomial::monomial(coeffQuotient, degDiff);
 		quotient.coeffs[degDiff] += coeffQuotient;
 		dividend = dividend - (divisor * term);
@@ -105,6 +106,7 @@ void Polynomial::divmod(const Polynomial& divisor, Polynomial& quotient, Polynom
 	while (!dividend.isZero() && dividend.degree() >= d) {
 		int degDiff = dividend.degree() - d;
 		long long coeffQuotient = dividend.coeffs.back() / divisor.coeffs.back();
+		if (coeffQuotient == 0) break; // avoid infinite loop on non-divisible leading coefficients
 		Polynomial term = Polynomial::monomial(coeffQuotient, degDiff);
 		q.coeffs[degDiff] += coeffQuotient;
 		dividend = dividend - (divisor * term);

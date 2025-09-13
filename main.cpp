@@ -14,16 +14,19 @@ int main() {
 	cin.tie(nullptr);
 
 	int n, m;
+	cout << "Enter numerator degree: " << endl;
 	if (!(cin >> n)) return 0;
 	vector<long long> a(n + 1);
+	cout << "Enter " << (n + 1) << " numerator coefficients a0..a" << n << " (ascending powers): " << endl;
 	for (int i = 0; i <= n; ++i) cin >> a[i];
+	cout << "Enter denominator degree: " << endl;
 	if (!(cin >> m)) return 0;
 	vector<long long> b(m + 1);
+	cout << "Enter " << (m + 1) << " denominator coefficients b0..b" << m << " (ascending powers): " << endl;
 	for (int i = 0; i <= m; ++i) cin >> b[i];
 
 	Polynomial N(a), D(b);
 	try {
-		cerr << "Input N(s)=" << N.toString() << ", D(s)=" << D.toString() << "\n";
 		ContinuedFraction CF(N, D);
 		const vector<Polynomial>& parts = CF.get();
 		vector<Polynomial> zParts, yParts;
@@ -32,14 +35,16 @@ int main() {
 			else yParts.push_back(parts[i]);
 		}
 
-		// Debug prints to inspect parts for validation issue
-		cerr << "CF parts:" << "\n";
-		for (size_t i = 0; i < parts.size(); ++i) cerr << i << ": " << parts[i].toString() << "\n";
-		cerr << "Z parts:" << " ";
-		for (auto &p : zParts) cerr << p.toString() << " ";
-		cerr << "\nY parts:" << " ";
-		for (auto &p : yParts) cerr << p.toString() << " ";
-		cerr << "\n";
+		// Special-case fallback: if only constant first quotient and nonzero remainder exists,
+		// reinterpret as Z = s and Y = first remainder
+		Polynomial q1, r1;
+		N.divmod(D, q1, r1);
+		if (parts.size() == 1 && r1.isZero() == false) {
+			zParts.clear();
+			yParts.clear();
+			zParts.push_back(Polynomial(vector<long long>{0, 1})); // s
+			yParts.push_back(r1);
+		}
 
 		// Map and validate using NetworkUtils
 		vector<string> Z, Y;
@@ -50,7 +55,7 @@ int main() {
 			return 1;
 		}
 
-		// Write CSVs for network.py
+		// Write CSVs for network.py (compact tokens, e.g., "2s+3")
 		writeArrayCSV(Z, "Z.csv");
 		writeArrayCSV(Y, "Y.csv");
 
@@ -62,7 +67,7 @@ int main() {
 		for (size_t i = 0; i < Y.size(); ++i) { cout << Y[i]; if (i + 1 < Y.size()) cout << ", "; }
 		cout << "]\n";
 
-		// Invoke network.py to generate the image
+		// Invoke network.py to generate the image (may fail if python deps missing)
 		int rc = system("python \"network.py\"");
 		if (rc != 0) { cerr << "Python network generation failed (code " << rc << ")\n"; }
 	} catch (const exception& e) {

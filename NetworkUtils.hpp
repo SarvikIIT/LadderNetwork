@@ -4,19 +4,19 @@
 #include <vector>
 #include "Polynomial.hpp"
 
-// Returns true if p is exactly 1 or s
-bool isAllowedMonomial(const Polynomial& p);
-
-// Returns "1", "s", "0" (interpretable as trailing 1/s), or "INVALID"
+// Returns the printable polynomial token (e.g., "2s+3") or "0" (for trailing 1/s)
 std::string polynomialToToken(const Polynomial& p);
 
-// Map and validate Z and Y parts into tokens; allow trailing 1/s
-// Throws std::runtime_error on invalid network
+// Map Z and Y parts into tokens; allow trailing 1/s represented by final "0"
 void mapAndValidateTokens(
 	const std::vector<Polynomial>& zParts,
 	const std::vector<Polynomial>& yParts,
 	std::vector<std::string>& Z,
 	std::vector<std::string>& Y
 );
+
+// Expand a compact token like "2s+3", "2s", or "3" into a sequence of
+// base tokens {"s","1"} repeated. Returns false if unrecognized (e.g. s^2).
+bool expandToBaseTokens(const std::string& token, std::vector<std::string>& out);
 
 

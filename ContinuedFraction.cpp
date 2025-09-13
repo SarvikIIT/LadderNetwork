@@ -14,6 +14,8 @@ void ContinuedFraction::compute(const Polynomial& num, const Polynomial& den) {
 	while (!D.isZero()) {
 		Polynomial q, r;
 		N.divmod(D, q, r);
+		// If division made no progress (q is 0), stop without pushing q.
+		if (q.isZero()) break;
 		parts.push_back(q);
 		N = D;
 		D = r;
