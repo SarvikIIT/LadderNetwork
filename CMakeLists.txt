@@ -2,16 +2,19 @@ cmake_minimum_required(VERSION 3.15)
 project(NetworkLadder CXX)
 set(CMAKE_CXX_STANDARD 17)
 
+# Set source directory
+set(SOURCES_DIR src)
+
 add_library(network_core
-  Polynomial.cpp
-  ContinuedFraction.cpp
-  NetworkUtils.cpp
-  CSVMaker.cpp
+  ${SOURCES_DIR}/Polynomial.cpp
+  ${SOURCES_DIR}/ContinuedFraction.cpp
+  ${SOURCES_DIR}/NetworkUtils.cpp
+  ${SOURCES_DIR}/CSVMaker.cpp
 )
 
-target_include_directories(network_core PUBLIC .)
+target_include_directories(network_core PUBLIC ${SOURCES_DIR})
 
-add_executable(app main.cpp)
+add_executable(app ${SOURCES_DIR}/main.cpp)
 target_link_libraries(app PRIVATE network_core)
 
 # Tests (GoogleTest)

@@ -97,6 +97,122 @@ echo 1 1 1 1 0 1 | .\app.exe
 - `Y.csv` - Shunt admittances  
 - `ladder_network.png` - Visual schematic
 
+## 🌐 Web Application
+
+### Quick Web App Setup
+
+1. **Install Python dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Run the web application**
+   ```bash
+   python app.py
+   ```
+
+3. **Open your browser**
+   Navigate to: `http://localhost:5000`
+
+### Docker Deployment
+
+#### Option 1: Docker Compose (Recommended)
+
+```bash
+# Build and run with Docker Compose
+docker-compose up --build
+
+# Run in background
+docker-compose up -d
+```
+
+#### Option 2: Manual Docker Build
+
+```bash
+# Build the image
+docker build -t network-ladder .
+
+# Run the container
+docker run -p 5000:5000 network-ladder
+```
+
+### Web App Features
+
+- **🌐 Modern Web Interface**: Clean, responsive design with Bootstrap 5
+- **📊 Real-time Processing**: Instant network synthesis with live preview
+- **🖼️ Interactive Visualization**: Auto-generated circuit schematics
+- **📱 Mobile Friendly**: Works on desktop, tablet, and mobile devices
+- **⚡ Fast Performance**: Optimized C++ backend with Python frontend
+- **🎯 Example Templates**: Quick-start examples for common circuits
+
+### API Endpoints
+
+#### POST `/api/process`
+Process a transfer function and return network data.
+
+**Request:**
+```json
+{
+  "numerator": [1, 1],
+  "denominator": [0, 1]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "Z": ["s"],
+  "Y": ["1"],
+  "image": "base64_encoded_png_data"
+}
+```
+
+#### GET `/api/health`
+Health check endpoint.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "message": "Network Ladder API is running"
+}
+```
+
+### Production Deployment
+
+#### Using Docker (Recommended)
+
+```yaml
+# docker-compose.prod.yml
+version: '3.8'
+services:
+  network-ladder:
+    build: .
+    ports:
+      - "80:5000"
+    environment:
+      - FLASK_ENV=production
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+```
+
+#### Using Reverse Proxy (Nginx)
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    location / {
+        proxy_pass http://localhost:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
 ## 📚 Examples
 
 ### Example 1: Simple RC Network

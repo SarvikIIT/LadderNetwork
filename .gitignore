@@ -1,33 +1,64 @@
-# OS-specific
-.DS_Store
-Thumbs.db
-
-# Editors/IDE
-.vscode/
-.idea/
-.vs
+# Build artifacts
+build/
+out/
+*.exe
+*.obj
+*.o
+*.so
+*.dylib
+*.dll
 
 # Python
 __pycache__/
-*.pyc
-.venv/
-venv/
+*.py[cod]
+*$py.class
+*.so
+.Python
 env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
 
-# C/C++ build artifacts
-*.exe
-*.o
-*.obj
-*.out
-*.ilk
-*.pdb
-build/
-dist/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Project-generated files
-Z.csv
-Y.csv
-ladder_network.png
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # Logs
 *.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.csv
+*.png
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Node modules (if using any JS tools)
+node_modules/
+
+# Vercel
+.vercel
+
+# Heroku
+.heroku/
