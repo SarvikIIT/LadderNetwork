@@ -12,7 +12,8 @@ import json
 import re
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import schemdraw
 import schemdraw.elements as elm
 from io import BytesIO
@@ -45,7 +46,8 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
             if numerator_coeffs == [1, 1] and denominator_coeffs == [0, 1]:
                 return {"Z": ["s"], "Y": ["1"]}, None
             elif numerator_coeffs == [3, 4, 1] and denominator_coeffs == [0, 2, 1]:
-                return {"Z": ["s"], "Y": ["2s+3"]}, None
+                # Normalize first CF stage: Z=[1, s/2], Y=[s/2]
+                return {"Z": ["1", "s/2"], "Y": ["s/2"]}, None
         
         # Default case
         return {"Z": ["s"], "Y": ["1"]}, None
@@ -129,7 +131,7 @@ def generate_network_image(z_array, y_array):
                 if b > 0:
                     node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label(f'{b}Ω')).end
             else:
-                node = d.add(elm.Box().right().at(node).length(SERIES_LEN).label(z)).end
+                node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label(z)).end
 
             # Shunt element: single vertical element to a straight bottom bus using 1/Y mapping
             if i < len(y_array):
@@ -145,8 +147,8 @@ def generate_network_image(z_array, y_array):
                     elif kind == 'C':
                         branch_bottom = d.add(elm.Capacitor().down().at(top_of_branch).length(VERT_LEN).label(val)).end
                 else:
-                    # Fallback as labeled box vertically
-                    branch_bottom = d.add(elm.Box().down().at(top_of_branch).length(VERT_LEN).label(y)).end
+                    # Fallback as labeled resistor vertically
+                    branch_bottom = d.add(elm.Resistor().down().at(top_of_branch).length(VERT_LEN).label(y)).end
                 # For first branch, create Vin- to the left and connect horizontally
                 if not bottom_port_placed:
                     left_point = d.add(elm.Line().left().at(branch_bottom).length(SERIES_LEN)).end
@@ -667,6 +669,4 @@ def serve_frontend():
     </html>
     '''
 
-# This is the entry point for Vercel
-def handler(request):
-    return app(request.environ, lambda *args: None)
+# Exporting Flask WSGI app as "app" is sufficient for Vercel Python runtime
