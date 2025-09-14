@@ -50,5 +50,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/api/health || exit 1
 
-# Run the application (use platform-provided PORT with fallback to 5000)
-CMD ["sh", "-c", "gunicorn -w 4 -b 0.0.0.0:${PORT:-5000} wsgi:app"]
+# Run via shell so $PORT expands on platforms that don't inject a shell
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --timeout 600 wsgi:app"]
