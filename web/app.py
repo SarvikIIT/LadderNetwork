@@ -459,12 +459,13 @@ def generate_network_image(z_array, y_array):
                         # Fallback as a labeled resistor
                         elems = [('R', y)]
 
-                # Create a single rightward tap from the series node as the shunt entry
-                tap = d.add(elm.Line().right().at(top_of_branch).length(SERIES_LEN * 0.3)).end
+                # Create a single rightward tap from the series node as the shunt entry (even shorter)
+                tap = d.add(elm.Line().right().at(top_of_branch).length(SERIES_LEN * 0.12)).end
 
                 # Draw each element with incremental right offsets from the tap, then straight down
                 for idx, (kind, val) in enumerate(elems):
-                    at_point = tap if idx == 0 else d.add(elm.Line().right().at(tap).length(SERIES_LEN * 0.6 * idx)).end
+                    # Even tighter horizontal separation to further reduce right-side wire
+                    at_point = tap if idx == 0 else d.add(elm.Line().right().at(tap).length(SERIES_LEN * 0.3 * idx)).end
                     if kind == 'R':
                         btm = d.add(elm.Resistor().down().at(at_point).length(VERT_LEN).label(val, loc='right', fontsize=FONT_SIZE)).end
                     elif kind == 'L':
@@ -479,11 +480,18 @@ def generate_network_image(z_array, y_array):
 
                 # Tie bottoms together to form a straight local bottom bus
                 if len(branch_bottoms) > 1:
-                    for j in range(len(branch_bottoms) - 1):
-                        d.add(elm.Line().at(branch_bottoms[j]).to(branch_bottoms[j + 1]))
-
-                local_left = branch_bottoms[0]
-                local_right = branch_bottoms[-1]
+                    # Route the bus slightly below element ends to avoid overlapping symbol gaps
+                    bus_points = []
+                    for btm in branch_bottoms:
+                        p = d.add(elm.Line().down().at(btm).length(0.2)).end
+                        bus_points.append(p)
+                    for j in range(len(bus_points) - 1):
+                        d.add(elm.Line().at(bus_points[j]).to(bus_points[j + 1]))
+                    local_left = bus_points[0]
+                    local_right = bus_points[-1]
+                else:
+                    local_left = branch_bottoms[0]
+                    local_right = branch_bottoms[0]
                 # For first branch, create Vin- to the left and connect from local_left
                 if not bottom_port_placed:
                     left_point = d.add(elm.Line().left().at(local_left).length(SERIES_LEN)).end

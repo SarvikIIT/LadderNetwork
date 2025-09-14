@@ -70,12 +70,11 @@ int main() {
 			}
 		}
 
-		// Special-case normalization (Cauer-I around infinity):
-		// If the initial Euclidean division yields a constant quotient and nonzero remainder,
-		// reinterpret the first section as a series inductor 's' with shunt admittance equal to that remainder.
+		// Guarded normalization: if initial quotient is constant and remainder is linear (degree 1),
+		// reinterpret as first section Z = s and Y = remainder (restores Cauer-I for cases like (s^2+4s+3)/(s^2+2s)).
 		Polynomial q1, r1;
 		N.divmod(D, q1, r1);
-		if (!r1.isZero() && q1.degree() == 0) {
+		if (!r1.isZero() && q1.degree() == 0 && r1.degree() == 1) {
 			zParts.clear();
 			yParts.clear();
 			zParts.push_back(Polynomial(vector<double>{0.0, 1.0})); // s
