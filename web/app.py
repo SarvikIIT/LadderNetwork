@@ -71,14 +71,71 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
         numerator_coeffs = trim_trailing_zeros(list(numerator_coeffs))
         denominator_coeffs = trim_trailing_zeros(list(denominator_coeffs))
 
+        # Normalize overall sign so that leading denominator coefficient is positive
+        def leading_coeff(arr):
+            return arr[-1] if arr else 0
+        if leading_coeff(denominator_coeffs) < 0:
+            numerator_coeffs = [ -x for x in numerator_coeffs ]
+            denominator_coeffs = [ -x for x in denominator_coeffs ]
+
+        # Basic degree realizability: |deg(N) - deg(D)| <= 1 for passive RLC driving-point Z(s)
+        deg_n = len(numerator_coeffs) - 1
+        deg_d = len(denominator_coeffs) - 1
+        if abs(deg_n - deg_d) > 1:
+            return None, "Not realizable as passive RLC: |deg(N) - deg(D)| must be <= 1"
+
+        # Coefficient sanity: require all finite reals and nonnegative after normalization
+        def has_invalid_coeffs(arr):
+            for v in arr:
+                if v is None:
+                    return True
+                try:
+                    _ = float(v)
+                except Exception:
+                    return True
+            return False
+        if has_invalid_coeffs(numerator_coeffs) or has_invalid_coeffs(denominator_coeffs):
+            return None, "Invalid coefficients: must be real numbers"
+
+        if any(x < 0 for x in numerator_coeffs) or any(x < 0 for x in denominator_coeffs):
+            return None, "Not realizable as passive RLC: negative coefficients detected"
+
+        # Denominator must be Hurwitz (all poles in LHP). Use Routh-Hurwitz test.
+        def is_hurwitz_stable(coeffs_asc):
+            # Convert ascending [a0, a1, ..., an] to descending [an, ..., a0]
+            a = list(reversed(coeffs_asc))
+            # All coefficients strictly positive
+            if any(c <= 0 for c in a):
+                return False
+            n = len(a) - 1
+            # Build Routh table
+            rows = n + 1
+            cols = (n // 2) + 1
+            table = [[0.0 for _ in range(cols)] for _ in range(rows)]
+            # First two rows
+            table[0][:] = [a[i] for i in range(0, len(a), 2)] + [0.0] * (cols - len(a[0::2]))
+            table[1][:] = [a[i] for i in range(1, len(a), 2)] + [0.0] * (cols - len(a[1::2]))
+            # Fill remaining rows
+            for r in range(2, rows):
+                for c in range(cols - 1):
+                    top_left = table[r - 2][0]
+                    if abs(top_left) < 1e-12:
+                        # epsilon substitution to avoid division by zero; this indicates a marginal case
+                        top_left = 1e-12
+                    table[r][c] = ((table[r - 2][0] * table[r - 1][c + 1]) - (table[r - 1][0] * table[r - 2][c + 1])) / top_left
+            # Stable if first column all positive
+            first_col = [table[r][0] for r in range(rows)]
+            return all(x > 0 for x in first_col if isinstance(x, (int, float)))
+
+        if not is_hurwitz_stable(denominator_coeffs):
+            return None, "Not realizable/stable: denominator is not Hurwitz (poles not in LHP)"
+
         # Check for invalid network conditions
         if len(numerator_coeffs) > len(denominator_coeffs) + 1:
             return None, "Invalid network: Numerator degree too high for ladder synthesis"
 
         # Shortcut trivial forms without invoking C++
         # Handle constants and single-term cases robustly
-        deg_n = len(numerator_coeffs) - 1
-        deg_d = len(denominator_coeffs) - 1
 
         def is_zero_poly(poly):
             return all(abs(x) == 0 for x in poly)
@@ -107,6 +164,8 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
                     scale = safe_div(a0, b1)
                     if scale is None:
                         scale = 0
+                    if scale <= 0:
+                        return None, "Not realizable as passive RLC: negative or zero capacitance implied"
                     # If scale == 1: token '1/s', else 'scale/s'
                     if abs(scale - 1) < 1e-12:
                         return {"Z": ["1/s"], "Y": []}, None
@@ -117,6 +176,8 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
                     scale = safe_div(b0, a1)
                     if scale is None:
                         scale = 0
+                    if scale <= 0:
+                        return None, "Not realizable as passive RLC: negative or zero inductance implied"
                     if abs(scale - 1) < 1e-12:
                         return {"Z": ["s"], "Y": []}, None
                     else:
@@ -199,6 +260,49 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
                 if k is not None:
                     return {"Z": [f"{k}"], "Y": []}, None
             return None, "Invalid network: No valid network elements generated"
+
+        # Validate synthesized tokens are realizable with nonnegative passive components
+        def token_is_linear_positive(tok):
+            t = str(tok).replace(' ', '')
+            # Reject explicit powers beyond 1
+            if re.search(r's\^\d+', t) or re.search(r'/s\^\d+', t):
+                return False
+            # Reject negatives anywhere
+            if '-' in t:
+                return False
+            # Allowed simple forms
+            if re.fullmatch(r'\d+(?:\.\d+)?', t):
+                return float(t) >= 0
+            if t in ('1', 's', '1/s'):
+                return True
+            if re.fullmatch(r's/(\d+(?:\.\d+)?)', t):
+                return float(re.fullmatch(r's/(\d+(?:\.\d+)?)', t).group(1)) > 0
+            if re.fullmatch(r'(\d+(?:\.\d+)?)/s', t):
+                return float(re.fullmatch(r'(\d+(?:\.\d+)?)/s', t).group(1)) > 0
+            # Linear a*s + b or b + a*s
+            if re.fullmatch(r'(?:(\d+(?:\.\d+)?)\*?s|s)\+(\d+(?:\.\d+)?)', t):
+                return True
+            if re.fullmatch(r'(\d+(?:\.\d+)?)\+(?:(\d+(?:\.\d+)?)\*?s|s)', t):
+                return True
+            # For Y, we might receive sums like "a"+"b*s"; this will be handled elementwise below
+            return False
+
+        # Validate Z tokens
+        for zt in z_array:
+            if not token_is_linear_positive(zt):
+                return None, f"Not realizable/supported term in Z: {zt}"
+
+        # Validate Y tokens (allow '+' sums of allowed monomials)
+        for yt in y_array:
+            t = str(yt).replace(' ', '')
+            parts = t.split('+') if '+' in t else [t]
+            ok = True
+            for p in parts:
+                if not token_is_linear_positive(p):
+                    ok = False
+                    break
+            if not ok:
+                return None, f"Not realizable/supported term in Y: {yt}"
         
         return {"Z": z_array, "Y": y_array}, None
         
