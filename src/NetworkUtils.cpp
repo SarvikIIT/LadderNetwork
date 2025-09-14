@@ -1,12 +1,13 @@
 #include "NetworkUtils.hpp"
 #include <stdexcept>
+#include <cmath>
 
 using std::runtime_error;
 using std::string;
 using std::vector;
 
 // Forward declaration for use in mapAndValidateTokens
-static bool parseAsPlusB(const string& token, int& a, int& b);
+static bool parseAsPlusB(const string& token, double& a, double& b);
 
 string polynomialToToken(const Polynomial& p) {
 	if (p.isZero()) return "0"; // will be mapped to 1/s if trailing
@@ -37,21 +38,10 @@ void mapAndValidateTokens(
 		Y.push_back(tok);
 	}
 
-	// Normalize first CF stage: if Z[0] == "s" and Y[0] is linear a*s + b,
-	// rewrite to Z = ["1", "s/a", ...], Y = ["s/a", ...]
-	if (!Z.empty() && !Y.empty()) {
-		if (Z[0] == "s") {
-			int a = -1, b = -1;
-			if (parseAsPlusB(Y[0], a, b) && a > 0) {
-				Z[0] = "1";
-				Z.insert(Z.begin() + 1, string("s/") + std::to_string(a));
-				Y[0] = string("s/") + std::to_string(a);
-			}
-		}
-	}
+	// Do not rewrite the initial stage; preserve the pure Cauer-I parts
 }
 
-static bool parseAsPlusB(const string& token, int& a, int& b) {
+static bool parseAsPlusB(const string& token, double& a, double& b) {
 	string t;
 	for (char c : token) if (c != ' ') t.push_back(c);
 	// Patterns: a*s+b, as+b, s+b, b+a*s, b+as, b+s
@@ -66,10 +56,10 @@ static bool parseAsPlusB(const string& token, int& a, int& b) {
 				string ls = left; size_t pos = ls.find("s");
 				if (pos != string::npos) {
 					string coef = ls.substr(0, pos);
-					if (coef == "") a = 1; else a = stoi(coef);
+					if (coef == "") a = 1.0; else a = std::stod(coef);
 				} else a = -1;
 			}
-			if (a != -1) { b = right.empty() ? 0 : stoi(right); return true; }
+			if (a != -1) { b = right.empty() ? 0.0 : std::stod(right); return true; }
 		}
 	}
 	// Try b-first
@@ -78,13 +68,13 @@ static bool parseAsPlusB(const string& token, int& a, int& b) {
 		if (plus != (int)string::npos) {
 			string left = t.substr(0, plus);
 			string right = t.substr(plus + 1);
-			try { b = stoi(left); } catch (...) { b = -1; }
+			try { b = std::stod(left); } catch (...) { b = -1; }
 			if (b != -1) {
 				if (right == "s") { a = 1; return true; }
 				size_t pos = right.find("s");
 				if (pos != string::npos) {
 					string coef = right.substr(0, pos);
-					if (coef == "") a = 1; else a = stoi(coef);
+					if (coef == "") a = 1.0; else a = std::stod(coef);
 					return true;
 				}
 			}
@@ -101,10 +91,10 @@ bool expandToBaseTokens(const string& token, vector<string>& out) {
 	if (t == "1") { out.push_back("1"); return true; }
 	if (t == "1/s") { out.push_back("1/s"); return true; }
 	// a*s + b
-	int a = -1, b = -1;
+	double a = -1.0, b = -1.0;
 	if (parseAsPlusB(t, a, b)) {
-		for (int i = 0; i < a; ++i) out.push_back("s");
-		for (int i = 0; i < b; ++i) out.push_back("1");
+		for (int i = 0; i < (int)std::round(a); ++i) out.push_back("s");
+		for (int i = 0; i < (int)std::round(b); ++i) out.push_back("1");
 		return true;
 	}
 	return false;

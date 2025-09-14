@@ -16,12 +16,12 @@ int main() {
 	int n, m;
 	cout << "Enter numerator degree: " << endl;
 	if (!(cin >> n)) return 0;
-	vector<long long> a(n + 1);
+	vector<double> a(n + 1);
 	cout << "Enter " << (n + 1) << " numerator coefficients a0..a" << n << " (ascending powers): " << endl;
 	for (int i = 0; i <= n; ++i) cin >> a[i];
 	cout << "Enter denominator degree: " << endl;
 	if (!(cin >> m)) return 0;
-	vector<long long> b(m + 1);
+	vector<double> b(m + 1);
 	cout << "Enter " << (m + 1) << " denominator coefficients b0..b" << m << " (ascending powers): " << endl;
 	for (int i = 0; i <= m; ++i) cin >> b[i];
 
@@ -35,14 +35,50 @@ int main() {
 			else yParts.push_back(parts[i]);
 		}
 
-		// Special-case fallback: if only constant first quotient and nonzero remainder exists,
-		// reinterpret as Z = s and Y = first remainder
+		// Validate physical non-negativity of coefficients in all quotient parts
+		auto isPhysicallyNonnegative = [](const vector<Polynomial>& zs, const vector<Polynomial>& ys){
+			auto okPoly = [](const Polynomial& p){
+				if (p.isZero()) return true;
+				int deg = p.degree();
+				if (deg > 1) return false;
+				if (deg == 1) {
+					double a = p.coeffs.size() > 1 ? p.coeffs[1] : 0.0;
+					double b = p.coeffs.size() > 0 ? p.coeffs[0] : 0.0;
+					return (a >= -1e-12) && (b >= -1e-12);
+				}
+				double b = p.coeffs.size() > 0 ? p.coeffs[0] : 0.0;
+				return (b >= -1e-12);
+			};
+			for (const auto& p : zs) { if (!okPoly(p)) return false; }
+			for (const auto& p : ys) { if (!okPoly(p)) return false; }
+			return true;
+		};
+
+		bool cauerIValid = isPhysicallyNonnegative(zParts, yParts);
+		if (!cauerIValid) {
+			// Try Cauer-II (admittance-first): expand D/N
+			ContinuedFraction CF2(D, N);
+			const vector<Polynomial>& parts2 = CF2.get();
+			vector<Polynomial> z2, y2;
+			for (size_t i = 0; i < parts2.size(); ++i) {
+				if ((i % 2) == 0) y2.push_back(parts2[i]); // even -> Y
+				else z2.push_back(parts2[i]);              // odd  -> Z
+			}
+			if (isPhysicallyNonnegative(z2, y2)) {
+				zParts.swap(z2);
+				yParts.swap(y2);
+			}
+		}
+
+		// Special-case normalization (Cauer-I around infinity):
+		// If the initial Euclidean division yields a constant quotient and nonzero remainder,
+		// reinterpret the first section as a series inductor 's' with shunt admittance equal to that remainder.
 		Polynomial q1, r1;
 		N.divmod(D, q1, r1);
-		if (parts.size() == 1 && r1.isZero() == false) {
+		if (!r1.isZero() && q1.degree() == 0) {
 			zParts.clear();
 			yParts.clear();
-			zParts.push_back(Polynomial(vector<long long>{0, 1})); // s
+			zParts.push_back(Polynomial(vector<double>{0.0, 1.0})); // s
 			yParts.push_back(r1);
 		}
 

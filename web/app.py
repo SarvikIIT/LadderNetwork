@@ -71,71 +71,126 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
         numerator_coeffs = trim_trailing_zeros(list(numerator_coeffs))
         denominator_coeffs = trim_trailing_zeros(list(denominator_coeffs))
 
-        # Normalize overall sign so that leading denominator coefficient is positive
-        def leading_coeff(arr):
-            return arr[-1] if arr else 0
-        if leading_coeff(denominator_coeffs) < 0:
-            numerator_coeffs = [ -x for x in numerator_coeffs ]
-            denominator_coeffs = [ -x for x in denominator_coeffs ]
+        # Pre-checks for positive-real realizability with detailed reporting
+        import numpy as np
 
-        # Basic degree realizability: |deg(N) - deg(D)| <= 1 for passive RLC driving-point Z(s)
-        deg_n = len(numerator_coeffs) - 1
-        deg_d = len(denominator_coeffs) - 1
-        if abs(deg_n - deg_d) > 1:
-            return None, "Not realizable as passive RLC: |deg(N) - deg(D)| must be <= 1"
+        failures = []
 
-        # Coefficient sanity: require all finite reals and nonnegative after normalization
-        def has_invalid_coeffs(arr):
-            for v in arr:
-                if v is None:
-                    return True
+        def degree(arr):
+            return len(arr) - 1
+
+        def lowest_degree(arr):
+            for i, c in enumerate(arr):
+                if abs(c) > 0:
+                    return i
+            return None
+
+        def rule1_all_real_positive(name, arr):
+            ok = True
+            for x in arr:
                 try:
-                    _ = float(v)
+                    if isinstance(x, complex):
+                        ok = False; break
+                    xf = float(x)
+                    if xf < 0:
+                        ok = False; break
                 except Exception:
-                    return True
-            return False
-        if has_invalid_coeffs(numerator_coeffs) or has_invalid_coeffs(denominator_coeffs):
-            return None, "Invalid coefficients: must be real numbers"
+                    ok = False; break
+            if not ok:
+                failures.append("(1) Coefficients of %s must be real and non-negative." % name)
 
-        if any(x < 0 for x in numerator_coeffs) or any(x < 0 for x in denominator_coeffs):
-            return None, "Not realizable as passive RLC: negative coefficients detected"
+        def rule5_parity_missing_ok(name, arr):
+            if not arr:
+                failures.append("(5) %s has no coefficients." % name); return
+            hi = len(arr) - 1
+            lo = lowest_degree(arr)
+            if lo is None:
+                failures.append("(5) %s is identically zero." % name); return
+            exps = [i for i in range(len(arr)) if abs(arr[i]) > 0]
+            if len(exps) <= 1:
+                return
+            missing_interior = any(abs(arr[k]) == 0 for k in range(lo, hi + 1))
+            if missing_interior:
+                first_parity = exps[0] % 2
+                parity_same = all((e % 2) == first_parity for e in exps)
+                if not parity_same:
+                    failures.append("(5) Missing interior terms in %s are not of single parity (all-even or all-odd)." % name)
 
-        # Denominator must be Hurwitz (all poles in LHP). Use Routh-Hurwitz test.
-        def is_hurwitz_stable(coeffs_asc):
-            # Convert ascending [a0, a1, ..., an] to descending [an, ..., a0]
-            a = list(reversed(coeffs_asc))
-            # All coefficients strictly positive
-            if any(c <= 0 for c in a):
-                return False
-            n = len(a) - 1
-            # Build Routh table
-            rows = n + 1
-            cols = (n // 2) + 1
-            table = [[0.0 for _ in range(cols)] for _ in range(rows)]
-            # First two rows
-            table[0][:] = [a[i] for i in range(0, len(a), 2)] + [0.0] * (cols - len(a[0::2]))
-            table[1][:] = [a[i] for i in range(1, len(a), 2)] + [0.0] * (cols - len(a[1::2]))
-            # Fill remaining rows
-            for r in range(2, rows):
-                for c in range(cols - 1):
-                    top_left = table[r - 2][0]
-                    if abs(top_left) < 1e-12:
-                        # epsilon substitution to avoid division by zero; this indicates a marginal case
-                        top_left = 1e-12
-                    table[r][c] = ((table[r - 2][0] * table[r - 1][c + 1]) - (table[r - 1][0] * table[r - 2][c + 1])) / top_left
-            # Stable if first column all positive
-            first_col = [table[r][0] for r in range(rows)]
-            return all(x > 0 for x in first_col if isinstance(x, (int, float)))
+        def rule234_roots(name, arr):
+            if not arr or all(abs(x) == 0 for x in arr):
+                failures.append("(2)(3)(4) %s is zero or invalid for root checks." % name); return
+            poly_desc = list(reversed(arr))
+            r = np.roots(poly_desc)
+            tol = 1e-8
+            # (3) Left-half-plane or on imaginary axis
+            if np.any(np.real(r) > tol):
+                failures.append("(3) Some roots of %s lie in the right half-plane (Re > 0)." % name)
+            # (2) Conjugate pairs
+            complex_roots = [z for z in r if abs(np.imag(z)) > tol]
+            used = [False] * len(complex_roots)
+            for i in range(len(complex_roots)):
+                if used[i]:
+                    continue
+                found = False
+                for j in range(i + 1, len(complex_roots)):
+                    if used[j]:
+                        continue
+                    if abs(complex_roots[j] - np.conj(complex_roots[i])) < 1e-6:
+                        used[i] = used[j] = True
+                        found = True
+                        break
+                if not found:
+                    failures.append("(2) Complex roots of %s do not occur in conjugate pairs." % name)
+                    break
+            # (4) Simplicity on jω-axis
+            imag_axis = [z for z in r if abs(np.real(z)) <= tol]
+            taken = [False] * len(imag_axis)
+            for i in range(len(imag_axis)):
+                if taken[i]:
+                    continue
+                mult = 1
+                for j in range(i + 1, len(imag_axis)):
+                    if taken[j]:
+                        continue
+                    if abs(imag_axis[j] - imag_axis[i]) < 1e-6:
+                        taken[j] = True
+                        mult += 1
+                if mult > 1:
+                    failures.append("(4) %s has a multiple root on the imaginary axis (must be simple)." % name)
+                    break
 
-        if not is_hurwitz_stable(denominator_coeffs):
-            return None, "Not realizable/stable: denominator is not Hurwitz (poles not in LHP)"
+        # Apply rules
+        rule1_all_real_positive("N(s)", numerator_coeffs)
+        rule1_all_real_positive("D(s)", denominator_coeffs)
 
-        # Check for invalid network conditions
+        deg_n = degree(numerator_coeffs)
+        deg_d = degree(denominator_coeffs)
+        if abs(deg_n - deg_d) not in (0, 1):
+            failures.append("(6) Degree difference between N(s) and D(s) must be 0 or 1.")
+
+        ld_n = lowest_degree(numerator_coeffs)
+        ld_d = lowest_degree(denominator_coeffs)
+        if ld_n is None or ld_d is None or abs(ld_n - ld_d) > 1:
+            failures.append("(7) Lowest-degree terms of N(s) and D(s) must differ by at most 1.")
+
+        rule5_parity_missing_ok("N(s)", numerator_coeffs)
+        rule5_parity_missing_ok("D(s)", denominator_coeffs)
+
+        rule234_roots("N(s)", numerator_coeffs)
+        rule234_roots("D(s)", denominator_coeffs)
+
+        if failures:
+            msg = "Not realizable circuit:\n" + "\n".join(f"- {f}" for f in failures)
+            return None, msg
+
+        # Legacy guard (kept but superseded by above)
         if len(numerator_coeffs) > len(denominator_coeffs) + 1:
             return None, "Invalid network: Numerator degree too high for ladder synthesis"
 
         # Shortcut trivial forms without invoking C++
         # Handle constants and single-term cases robustly
+        deg_n = len(numerator_coeffs) - 1
+        deg_d = len(denominator_coeffs) - 1
 
         def is_zero_poly(poly):
             return all(abs(x) == 0 for x in poly)
@@ -164,8 +219,6 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
                     scale = safe_div(a0, b1)
                     if scale is None:
                         scale = 0
-                    if scale <= 0:
-                        return None, "Not realizable as passive RLC: negative or zero capacitance implied"
                     # If scale == 1: token '1/s', else 'scale/s'
                     if abs(scale - 1) < 1e-12:
                         return {"Z": ["1/s"], "Y": []}, None
@@ -176,8 +229,6 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
                     scale = safe_div(b0, a1)
                     if scale is None:
                         scale = 0
-                    if scale <= 0:
-                        return None, "Not realizable as passive RLC: negative or zero inductance implied"
                     if abs(scale - 1) < 1e-12:
                         return {"Z": ["s"], "Y": []}, None
                     else:
@@ -260,49 +311,6 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
                 if k is not None:
                     return {"Z": [f"{k}"], "Y": []}, None
             return None, "Invalid network: No valid network elements generated"
-
-        # Validate synthesized tokens are realizable with nonnegative passive components
-        def token_is_linear_positive(tok):
-            t = str(tok).replace(' ', '')
-            # Reject explicit powers beyond 1
-            if re.search(r's\^\d+', t) or re.search(r'/s\^\d+', t):
-                return False
-            # Reject negatives anywhere
-            if '-' in t:
-                return False
-            # Allowed simple forms
-            if re.fullmatch(r'\d+(?:\.\d+)?', t):
-                return float(t) >= 0
-            if t in ('1', 's', '1/s'):
-                return True
-            if re.fullmatch(r's/(\d+(?:\.\d+)?)', t):
-                return float(re.fullmatch(r's/(\d+(?:\.\d+)?)', t).group(1)) > 0
-            if re.fullmatch(r'(\d+(?:\.\d+)?)/s', t):
-                return float(re.fullmatch(r'(\d+(?:\.\d+)?)/s', t).group(1)) > 0
-            # Linear a*s + b or b + a*s
-            if re.fullmatch(r'(?:(\d+(?:\.\d+)?)\*?s|s)\+(\d+(?:\.\d+)?)', t):
-                return True
-            if re.fullmatch(r'(\d+(?:\.\d+)?)\+(?:(\d+(?:\.\d+)?)\*?s|s)', t):
-                return True
-            # For Y, we might receive sums like "a"+"b*s"; this will be handled elementwise below
-            return False
-
-        # Validate Z tokens
-        for zt in z_array:
-            if not token_is_linear_positive(zt):
-                return None, f"Not realizable/supported term in Z: {zt}"
-
-        # Validate Y tokens (allow '+' sums of allowed monomials)
-        for yt in y_array:
-            t = str(yt).replace(' ', '')
-            parts = t.split('+') if '+' in t else [t]
-            ok = True
-            for p in parts:
-                if not token_is_linear_positive(p):
-                    ok = False
-                    break
-            if not ok:
-                return None, f"Not realizable/supported term in Y: {yt}"
         
         return {"Z": z_array, "Y": y_array}, None
         
@@ -317,10 +325,16 @@ def generate_network_image(z_array, y_array):
         # Constants for drawing - optimized for web display
         SERIES_LEN = 2.0
         VERT_LEN = 2.0
+        FONT_SIZE = 9
+        BUS_DROP = 0.0
 
         def dec(x: float) -> str:
             try:
-                return ("%g" % x)
+                s = f"{x:.3f}"
+                s = s.rstrip('0').rstrip('.')
+                if s == '-0':
+                    s = '0'
+                return s
             except Exception:
                 return str(x)
         
@@ -346,7 +360,7 @@ def generate_network_image(z_array, y_array):
                 a = float(t)
                 if a == 0:
                     return None
-                return ('R', f'1/{a}Ω')
+                return ('R', f'{dec(1.0/a)}Ω')
             # a*s -> capacitor with C = 1/a F
             if t == 's':
                 return ('C', '1F')
@@ -355,14 +369,14 @@ def generate_network_image(z_array, y_array):
                 a = float(m.group(1))
                 if a == 0:
                     return None
-                return ('C', f'1/{a}F')
-            # s/n -> capacitor with C = n F (since Y = C s)
+                return ('C', f'{dec(a)}F')
+            # s/n -> capacitor with C = 1/n F (since Y = C s)
             m = re.fullmatch(r's/(\d+(?:\.\d+)?)', t)
             if m:
                 n = float(m.group(1))
                 if n == 0:
                     return None
-                return ('C', f'{n}F')
+                return ('C', f'{dec(1.0/n)}F')
             # 1/(a*s) or 1/s -> inductor with L = a H
             if t == '1/s':
                 return ('L', '1H')
@@ -386,16 +400,7 @@ def generate_network_image(z_array, y_array):
                 elems.append(kv)
             return elems
 
-        # Optional CF normalization for first section: if initial Z is 's' and first Y is linear 'a s + b',
-        # transform to Z=['1', 's/a'] and Y=['s/a'] as per requested CF form.
-        if len(z_array) >= 1 and len(y_array) >= 1:
-            z0 = str(z_array[0]).strip()
-            m_lin = re.fullmatch(r"\s*(?:(\d+(?:\.\d+)?)\*?s|s)\s*\+\s*(\d+(?:\.\d+)?)\s*", str(y_array[0]))
-            if z0 == 's' and m_lin:
-                a = float(m_lin.group(1)) if m_lin.group(1) else 1.0
-                # b is m_lin.group(2), but it is absorbed in the CF normalization to a leading '1'
-                z_array = ['1', f's/{a}'] + list(z_array[1:])
-                y_array = [f's/{a}'] + list(y_array[1:])
+        # Preserve Cauer-I tokens exactly as produced by the core; do not rewrite stages here.
 
         # Create ladder network
         d = schemdraw.Drawing()
@@ -407,6 +412,7 @@ def generate_network_image(z_array, y_array):
 
         bottom_prev = None
         bottom_port_placed = False
+        had_shunt = False
 
         for i in range(len(z_array)):
             z = str(z_array[i]).strip()
@@ -414,34 +420,35 @@ def generate_network_image(z_array, y_array):
             # Series element(s) on the top rail (impedance mapping)
             # Pure numeric constant -> series resistor
             if re.fullmatch(r'\d+(?:\.\d+)?', z):
-                node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label(f'{dec(float(z))}Ω', loc='bottom')).end
+                node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label(f'{dec(float(z))}Ω', loc='bottom', fontsize=FONT_SIZE)).end
             elif z == '1':
-                node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label('1Ω', loc='bottom')).end
+                node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label('1Ω', loc='bottom', fontsize=FONT_SIZE)).end
             elif z == 's':
-                node = d.add(elm.Inductor().right().at(node).length(SERIES_LEN).label('1H', loc='bottom')).end
+                node = d.add(elm.Inductor().right().at(node).length(SERIES_LEN).label('1H', loc='bottom', fontsize=FONT_SIZE)).end
             elif z == '1/s':
-                node = d.add(elm.Capacitor().right().at(node).length(SERIES_LEN).label('1F', loc='bottom')).end
+                node = d.add(elm.Capacitor().right().at(node).length(SERIES_LEN).label('1F', loc='bottom', fontsize=FONT_SIZE)).end
             elif re.fullmatch(r's/(\d+(?:\.\d+)?)', z):
                 n = float(re.fullmatch(r's/(\d+(?:\.\d+)?)', z).group(1))
-                node = d.add(elm.Inductor().right().at(node).length(SERIES_LEN).label(f'{dec(1.0/n)}H', loc='bottom')).end
+                node = d.add(elm.Inductor().right().at(node).length(SERIES_LEN).label(f'{dec(1.0/n)}H', loc='bottom', fontsize=FONT_SIZE)).end
             elif re.fullmatch(r'(\d+(?:\.\d+)?)/s', z):
                 n = float(re.fullmatch(r'(\d+(?:\.\d+)?)/s', z).group(1))
-                node = d.add(elm.Capacitor().right().at(node).length(SERIES_LEN).label(f'{dec(1.0/n)}F', loc='bottom')).end
+                node = d.add(elm.Capacitor().right().at(node).length(SERIES_LEN).label(f'{dec(1.0/n)}F', loc='bottom', fontsize=FONT_SIZE)).end
             elif parsed_z is not None:
                 a, b = parsed_z
                 if a > 0:
-                    node = d.add(elm.Inductor().right().at(node).length(SERIES_LEN).label(f'{dec(a)}H', loc='bottom')).end
+                    node = d.add(elm.Inductor().right().at(node).length(SERIES_LEN).label(f'{dec(a)}H', loc='bottom', fontsize=FONT_SIZE)).end
                 if b > 0:
-                    node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label(f'{dec(b)}Ω', loc='bottom')).end
+                    node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label(f'{dec(b)}Ω', loc='bottom', fontsize=FONT_SIZE)).end
             else:
                 # Fallback: draw a labeled resistor so it renders on all versions
-                node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label(z, loc='bottom')).end
+                node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label(z, loc='bottom', fontsize=FONT_SIZE)).end
 
             # Shunt element(s): map Y token(s) to one or multiple vertical components to a bottom bus
             if i < len(y_array):
                 y = str(y_array[i]).strip()
                 top_of_branch = node
                 branch_bottoms = []
+                had_shunt = True
 
                 elems = parse_y_sum(y)
                 if elems is None:
@@ -452,40 +459,41 @@ def generate_network_image(z_array, y_array):
                         # Fallback as a labeled resistor
                         elems = [('R', y)]
 
-                # Draw each element with small horizontal offsets if multiple
+                # Create a single rightward tap from the series node as the shunt entry
+                tap = d.add(elm.Line().right().at(top_of_branch).length(SERIES_LEN * 0.3)).end
+
+                # Draw each element with incremental right offsets from the tap, then straight down
                 for idx, (kind, val) in enumerate(elems):
-                    at_point = top_of_branch
-                    if idx > 0:
-                        at_point = d.add(elm.Line().right().at(top_of_branch).length(SERIES_LEN * 0.5 * idx)).end
+                    at_point = tap if idx == 0 else d.add(elm.Line().right().at(tap).length(SERIES_LEN * 0.6 * idx)).end
                     if kind == 'R':
-                        btm = d.add(elm.Resistor().down().at(at_point).length(VERT_LEN).label(val, loc='right')).end
+                        btm = d.add(elm.Resistor().down().at(at_point).length(VERT_LEN).label(val, loc='right', fontsize=FONT_SIZE)).end
                     elif kind == 'L':
-                        btm = d.add(elm.Inductor().down().at(at_point).length(VERT_LEN).label(val, loc='right')).end
+                        btm = d.add(elm.Inductor().down().at(at_point).length(VERT_LEN).label(val, loc='right', fontsize=FONT_SIZE)).end
                     elif kind == 'C':
-                        btm = d.add(elm.Capacitor().down().at(at_point).length(VERT_LEN).label(val, loc='left')).end
+                        btm = d.add(elm.Capacitor().down().at(at_point).length(VERT_LEN).label(val, loc='right', fontsize=FONT_SIZE)).end
                     else:
-                        btm = d.add(elm.Resistor().down().at(at_point).length(VERT_LEN).label(val, loc='right')).end
+                        btm = d.add(elm.Resistor().down().at(at_point).length(VERT_LEN).label(val, loc='right', fontsize=FONT_SIZE)).end
                     branch_bottoms.append(btm)
 
                 # If Y is exactly 's/n', it's a single capacitor of value n F (no extra inductor)
 
-                # Tie bottoms together for a single local bottom node at this section
+                # Tie bottoms together to form a straight local bottom bus
                 if len(branch_bottoms) > 1:
                     for j in range(len(branch_bottoms) - 1):
                         d.add(elm.Line().at(branch_bottoms[j]).to(branch_bottoms[j + 1]))
 
-                # Representative bottom for bus chaining is the rightmost one
-                branch_bottom = branch_bottoms[-1]
-                # For first branch, create Vin- to the left and connect horizontally
+                local_left = branch_bottoms[0]
+                local_right = branch_bottoms[-1]
+                # For first branch, create Vin- to the left and connect from local_left
                 if not bottom_port_placed:
-                    left_point = d.add(elm.Line().left().at(branch_bottoms[0]).length(SERIES_LEN)).end
-                    d.add(elm.Dot().at(left_point).label('Vin-', loc='left'))
-                    bottom_prev = branch_bottom
+                    left_point = d.add(elm.Line().left().at(local_left).length(SERIES_LEN)).end
+                    d.add(elm.Dot().at(left_point).label('Vin-', loc='left', fontsize=FONT_SIZE))
+                    bottom_prev = local_right
                     bottom_port_placed = True
                 else:
-                    # Extend horizontal bottom bus between branch bottoms
-                    d.add(elm.Line().at(bottom_prev).to(branch_bottom))
-                    bottom_prev = branch_bottom
+                    # Extend global bus from previous rightmost to current local_left
+                    d.add(elm.Line().at(bottom_prev).to(local_left))
+                    bottom_prev = local_right
 
         # If no shunts, still close the loop: add Vin- below Vin+ and connect right end down to the bottom
         if not bottom_port_placed:
@@ -498,8 +506,8 @@ def generate_network_image(z_array, y_array):
             # Prevent duplicate closure below
             bottom_prev = None
 
-        # Close the mesh at the right end by connecting the last top node down to the bottom bus
-        if bottom_prev is not None:
+        # Close the mesh only if there were no shunt branches drawn
+        if bottom_prev is not None and not had_shunt:
             down_seg = d.add(elm.Line().down().at(node).length(VERT_LEN))
             down_end = down_seg.end
             d.add(elm.Line().at(bottom_prev).to(down_end))
@@ -546,7 +554,65 @@ def process_transfer_function():
         result, error = parse_transfer_function(numerator, denominator)
         
         if error:
-            return jsonify({'error': error}), 400
+            # Professional, structured error response (while preserving `error` for frontend compatibility)
+            title = "Not realizable circuit" if error.lower().startswith("not realizable circuit") else "Not realizable circuit with RLC components"
+            details = []
+            if error.startswith("Not realizable circuit:"):
+                # Parse bullet list lines into details array. Support both newline and inline "- " bullets.
+                lines = [ln.strip() for ln in error.split("\n")]
+                for ln in lines[1:]:
+                    if ln.startswith("-"):
+                        details.append(ln[1:].strip())
+                if not details:
+                    # Fallback: split inline bullets after the colon
+                    try:
+                        body = error.split(":", 1)[1]
+                        parts = re.split(r"\s*-\s+", body)
+                        for p in parts:
+                            p = p.strip()
+                            if p:
+                                details.append(p)
+                    except Exception:
+                        pass
+            # Build a polished multi-line error string for UIs that only read `error`
+            if details:
+                pretty_error = title + "\n" + "\n".join(f"• {d}" for d in details)
+            else:
+                pretty_error = title
+            payload = {
+                'success': False,
+                'error': pretty_error,
+                'message': title,
+                'details': details,
+                'code': 'PR_VALIDATION_FAILED'
+            }
+            return jsonify(payload), 400
+        
+        # Optional normalization to present elements in best physical form
+        def normalize_tokens(z_list, y_list):
+            zl = [str(z) for z in (z_list or [])]
+            yl = [str(y) for y in (y_list or [])]
+            # For the last Z token, if it's of the form a*s + b with b <= 0, drop the constant b
+            if zl:
+                t = zl[-1].replace(' ', '')
+                m = re.fullmatch(r'(?:(\d+(?:\.\d+)?)\*?s|s)([+-]\d+(?:\.\d+)?)', t)
+                if m:
+                    a = float(m.group(1)) if m.group(1) else 1.0
+                    b = float(m.group(2))
+                    if b <= 0:
+                        zl[-1] = (f"{dec(a)}s" if abs(a - 1.0) > 1e-12 else 's')
+                else:
+                    m2 = re.fullmatch(r'(\d+(?:\.\d+)?)[+-](?:(\d+(?:\.\d+)?)\*?s|s)', t)
+                    if m2:
+                        b = float(m2.group(1))
+                        a = float(m2.group(2)) if m2.group(2) else 1.0
+                        # If constant first and effectively negative in token, prefer pure inductance
+                        if '-' in t:
+                            zl[-1] = (f"{dec(a)}s" if abs(a - 1.0) > 1e-12 else 's')
+            return zl, yl
+
+        if not error and result:
+            result['Z'], result['Y'] = normalize_tokens(result.get('Z'), result.get('Y'))
         
         # Build pretty display strings for Z and Y
         def dec(x: float) -> str:
@@ -558,8 +624,11 @@ def process_transfer_function():
 
         def pretty_z(tok: str) -> str:
             t = tok.replace(' ', '')
-            if t == '1':
-                return 'L=1H'
+            # Pure numeric -> series resistor
+            m = re.fullmatch(r'(\d+(?:\.\d+)?)', t)
+            if m:
+                k = float(m.group(1))
+                return f'R={dec(k)}Ω'
             if t == 's':
                 return 'L=1H'
             if t == '1/s':
@@ -586,27 +655,27 @@ def process_transfer_function():
 
         def pretty_y(tok: str) -> str:
             t = tok.replace(' ', '')
-            # s/n → C=n F || L=1/n H (per requested CF rendering)
+            # s/n → C=1/n F
             m = re.fullmatch(r's/(\d+(?:\.\d+)?)', t)
             if m:
                 n = float(m.group(1))
-                return f'C={dec(n)}F || L={dec(1.0/n)}H'
+                return f'C={dec(1.0/n)}F'
             # a*s + b → parallel C and R
             m = re.fullmatch(r'(?:(\d+(?:\.\d+)?)\*?s|s)\+(\d+(?:\.\d+)?)', t)
             if m:
                 a = float(m.group(1)) if m.group(1) else 1.0
                 b = float(m.group(2))
-                return f'C={dec(1.0/a)}F || R={dec(1.0/b)}Ω'
+                return f'C={dec(a)}F || R={dec(1.0/b)}Ω'
             m = re.fullmatch(r'(\d+(?:\.\d+)?)\+(?:(\d+(?:\.\d+)?)\*?s|s)', t)
             if m:
                 b = float(m.group(1))
                 a = float(m.group(2)) if m.group(2) else 1.0
-                return f'C={dec(1.0/a)}F || R={dec(1.0/b)}Ω'
+                return f'C={dec(a)}F || R={dec(1.0/b)}Ω'
             # a*s
             m = re.fullmatch(r'(\d+(?:\.\d+)?)\*?s', t)
             if m:
                 a = float(m.group(1))
-                return f'C={dec(1.0/a)}F'
+                return f'C={dec(a)}F'
             if t == 's':
                 return 'C=1F'
             # constant b

@@ -6,16 +6,16 @@
 
 class Polynomial {
 	public:
-		std::vector<long long> coeffs;
+		std::vector<double> coeffs;
 
 		Polynomial();
-		explicit Polynomial(const std::vector<long long>& c);
+		explicit Polynomial(const std::vector<double>& c);
 
 		void normalize();
 		bool isZero() const;
 		int degree() const;
 
-		static Polynomial monomial(long long coeff, int degree);
+		static Polynomial monomial(double coeff, int degree);
 
 		Polynomial operator+(const Polynomial& second) const;
 		Polynomial operator-(const Polynomial& second) const;
