@@ -39,6 +39,47 @@ This project converts rational transfer functions into equivalent electrical lad
                                                 └─────────────────┘
 ```
 
+## 🎓 Professor’s Guide: How the System Works
+
+This is a brief, high-signal overview designed for fast review.
+
+- **Goal**: Given a rational driving-point impedance \( Z(s) = \dfrac{N(s)}{D(s)} \), synthesize an equivalent passive ladder network (Cauer form) and render its schematic.
+- **Why two languages?** C++ does the heavy algebra (fast polynomial Euclidean algorithm and tokenization). Python/Flask provides the web API and draws the circuit (Schemdraw/Matplotlib).
+- **UI**: A single-page app (`templates/index.html`) with MathJax previews, expression or coefficient inputs, and a dark-mode toggle.
+
+### End-to-End Flow
+1. User enters \(N(s), D(s)\) as either expressions (e.g., `s^2 + 3s + 2`) or coefficient tables.
+2. Frontend posts JSON to `POST /api/process` with two arrays: `numerator`, `denominator` (ascending powers).
+3. Backend (`web/app.py`):
+   - Trims trailing zeros for numeric stability, handles trivial cases (constant, `s`, `1/s`).
+   - Launches the C++ core (`app`/`app.exe`) via `subprocess` and streams coefficients.
+4. C++ core (`src/*.cpp`):
+   - Computes the polynomial continued fraction via Euclidean division.
+   - Alternates quotient polynomials into series impedances (Z) and shunt admittances (Y).
+   - Emits validated Z/Y token lists.
+5. Python renderer: maps tokens to Schemdraw primitives and generates a PNG schematic.
+6. API Response: `{ Z: [...], Y: [...], image: <base64-png> }` is returned to the UI.
+
+### File Map (key responsibilities)
+- `web/app.py`: Flask routes (`/`, `/api/process`, `/api/health`), C++ invocation, image encoding, edge-case handling.
+- `templates/index.html`: UI, MathJax rendering, inputs, live previews, microinteractions, dark-mode toggle.
+- `src/Polynomial.*`: basic polynomial arithmetic and division.
+- `src/ContinuedFraction.*`: polynomial Euclidean algorithm → continued fraction parts.
+- `src/NetworkUtils.*`: maps quotient polynomials to Z/Y tokens; sanity checks.
+- `wsgi.py`: exposes `app` for Gunicorn (production).
+- `Dockerfile`, `docker-compose.yml`: multi-stage build (C++ → Python 3.11 slim) and service runtime (Gunicorn).
+
+### Mathematical Summary (Cauer form)
+- Compute the continued fraction of \( Z(s)=\dfrac{N(s)}{D(s)} \) by repeated polynomial division: \( N = Q_0 D + R_1;\; D = Q_1 R_1 + R_2;\; \ldots \)
+- Even-indexed \(Q_{0}, Q_{2}, ...\) map to series impedances (Z); odd-indexed \(Q_{1}, Q_{3}, ...\) map to shunt admittances (Y).
+- Special cases handled explicitly: constants (resistor), `s` (inductor), `1/s` (capacitor).
+
+### One‑Minute Demo
+1) Local run: `python web/app.py` → open `http://localhost:5000`.
+2) Example: choose “RC: (s+1)/s” → press “Generate Network”.
+3) Observe MathJax preview, Z/Y token arrays, and the rendered ladder schematic.
+
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -108,7 +149,7 @@ echo 1 1 1 1 0 1 | .\app.exe
 
 2. **Run the web application**
    ```bash
-   python app.py
+   python web/app.py
    ```
 
 3. **Open your browser**
@@ -212,6 +253,12 @@ server {
     }
 }
 ```
+
+### Quick Deploy Recipes
+
+- Render: connect repo, choose Docker runtime, expose port 5000, health check `/api/health`.
+- VPS + Docker Compose: `docker compose up -d --build` and reverse proxy with Nginx to `127.0.0.1:5000`.
+- Heroku: use the included `Procfile` to run `gunicorn` (`wsgi:app`).
 
 ## 📚 Examples
 

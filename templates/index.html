@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driving-Point Impedance Synthesizer — Made by Sarvik</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script>
+        window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script>
+        (function initThemeEarly(){
+            try {
+                var saved = localStorage.getItem('theme');
+                if (saved === 'dark' || saved === 'light') { document.documentElement.setAttribute('data-theme', saved); }
+                else { document.documentElement.setAttribute('data-theme', 'light'); }
+            } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
+        })();
+    </script>
+    <style>
+        :root{ --bgA:#0b2e28; --bgB:#0f3f37; --bgC:#145a4f; --brand:#06beb6; --brand2:#48b1bf; --ink:#e5e7eb; --muted:#93a3ad; }
+        body { background: linear-gradient(160deg, var(--bgA) 0%, var(--bgB) 55%, var(--bgC) 100%);
+               min-height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: var(--ink); }
+        .main-container { background: #f7fbfa; color: #1f3240; border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,.25), 0 2px 6px rgba(0,0,0,.18); margin: 2rem auto; padding: 2rem; max-width: 1100px; border: 1px solid #e2eceb; }
+        .header { text-align: center; margin-bottom: 2rem; position: relative; }
+        .header h1 { color: #1f3240; font-weight: 800; margin-bottom: .25rem; letter-spacing: .2px; }
+        .header p { color: #5e7578; font-size: 1.05rem; }
+        .input-section { background: #ffffff; border-radius: 14px; padding: 1.25rem; margin-bottom: 2rem; border: 1px solid #e6efee; }
+        .pill-tabs { display: inline-flex; background: #eef3f2; border-radius: 10px; padding: .25rem; margin-bottom: 1rem; border: 1px solid #e2eceb; }
+        .pill-tabs button { border: none; background: transparent; padding: .5rem .9rem; border-radius: 8px; color: #3c5a5a; cursor: pointer; font-weight: 600; }
+        .pill-tabs button.active { background: #ffffff; color: #1f3240; box-shadow: inset 0 0 0 1px #d5e3e1; }
+        .polynomial-input { background: #ffffff; border-radius: 12px; padding: 1rem; border: 1px solid #e3eceb; transition: box-shadow .15s ease; }
+        .polynomial-input:hover { box-shadow: 0 8px 18px rgba(0,0,0,.08); }
+        .coefficient-input { background: #ffffff; color: #1f3240; border: 1px solid #c9d6d4; border-radius: 8px; padding: .65rem .75rem; transition: border-color .12s ease, box-shadow .12s ease; }
+        .coefficient-input:focus { border-color: #3aa89e; box-shadow: 0 0 0 .15rem rgba(58,168,158,.18); }
+        .btn-primary { position: relative; background: linear-gradient(135deg, var(--brand) 0%, var(--brand2) 100%); border: none; border-radius: 10px; padding: .85rem 2rem; font-weight: 700; color: #0b1614; box-shadow: 0 8px 18px rgba(6,190,182,.25); transition: transform .12s ease, box-shadow .12s ease; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 12px 22px rgba(6,190,182,.3); }
+        .btn-primary[disabled] { opacity: .75; cursor: not-allowed; }
+        .results-section { background: #ffffff; border-radius: 14px; padding: 1.25rem; margin-top: 2rem; border: 1px solid #e6efee; }
+        .network-image { max-width: 100%; border-radius: 12px; box-shadow: 0 10px 26px rgba(0,0,0,.3); margin: 1rem 0; }
+        .loading { display: none; text-align: center; padding: 2rem; }
+        .spinner-border { color: var(--brand2); }
+        .error-message { background: #fde8ea; color: #7b1822; padding: 1rem; border-radius: 10px; border: 1px solid #fac7cd; margin: 1rem 0; }
+        .success-message { background: #e6fbf4; color: #0d5b4f; padding: 1rem; border-radius: 10px; border: 1px solid #bdf0e4; margin: 1rem 0; }
+        .network-data { background: #f7faf9; border-radius: 12px; padding: 1rem; margin: 1rem 0; border: 1px solid #e2eceb; }
+        .example-section { background: #f7faf9; border-radius: 10px; padding: 1rem; margin: 1rem 0; border: 1px dashed #d6e4e2; }
+        .example-btn { background: #ffffff; color: #1f3240; border: 1px solid #d1dfdd; border-radius: 8px; padding: .45rem .9rem; margin: 0 .25rem .25rem 0; cursor: pointer; font-weight: 600; transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+        .example-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 12px rgba(0,0,0,.1); border-color: #3aa89e; }
+        .footer { text-align: center; margin-top: 2rem; padding: 1rem; color: #9bb4b1; }
+        .text-muted { color: #6e8488 !important; }
+        .form-control::placeholder { color: #7a8e91; opacity: .85; }
+        .form-control { color: #1f3240; }
+        .btn-outline-secondary { color: #286a62; border-color: #3d7f77; }
+        .btn-outline-secondary:hover { background: #e8f3f1; color: #134b45; border-color: #3aa89e; }
+        .btn-outline-primary { color: #245d86; border-color: #3b87c6; }
+        .btn-outline-primary:hover { background: #ecf4fb; color: #18496a; border-color: #2f79b8; }
+        .latex-preview { background: white; border-radius: 10px; padding: 1rem 1.25rem; border: 1px solid #e9ecef; }
+        .order-ctrl { display: inline-flex; align-items: center; gap: .4rem; }
+        .degree-input { width: 80px; text-align: center; }
+        .coeff-table { width: 100%; border-collapse: separate; border-spacing: 0 .5rem; }
+        .coeff-row { background: #fff; border: 1px solid #e3e9ee; border-radius: 10px; padding: .5rem .75rem; display: flex; align-items: center; justify-content: space-between; }
+        .coeff-row .left { display: flex; align-items: center; gap: .6rem; }
+        .coeff-row .right { color: #1f3240; font-weight: 600; min-width: 60px; text-align: left; }
+        .coeff-row input { width: 120px; text-align: right; }
+        .fade-in { animation: fadeIn .25s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-2px);} to { opacity: 1; transform: translateY(0);} }
+        @media (prefers-reduced-motion: reduce) { .fade-in { animation: none; } }
+        .theme-toggle { position: absolute; top: 0; right: 0; }
+        /* Dark mode overrides */
+        [data-theme="dark"] body { color: #e5e7eb; }
+        [data-theme="dark"] .main-container { background: #101c1a; color: #e5e7eb; border: 1px solid #203a35; }
+        [data-theme="dark"] .header h1 { color: #e5e7eb; }
+        [data-theme="dark"] .header p { color: #9fb2af; }
+        [data-theme="dark"] .input-section { background: #132522; border: 1px solid #24433d; }
+        [data-theme="dark"] .pill-tabs { background: #18312d; border: 1px solid #24433d; }
+        [data-theme="dark"] .pill-tabs button { color: #c8d7d5; }
+        [data-theme="dark"] .pill-tabs button.active { background: #1f3d38; color: #e5e7eb; box-shadow: inset 0 0 0 1px #2b4e48; }
+        [data-theme="dark"] .polynomial-input { background: #172c28; border: 1px solid #2b4e48; }
+        [data-theme="dark"] .coefficient-input { background: #1c342f; color: #e5e7eb; border: 1px solid #355e56; }
+        [data-theme="dark"] .results-section { background: #132522; border: 1px solid #24433d; }
+        [data-theme="dark"] .network-data { background: #172c28; border: 1px solid #2b4e48; }
+        [data-theme="dark"] .example-section { background: #172c28; border: 1px dashed #2b4e48; }
+        [data-theme="dark"] .example-btn { background: #1c342f; color: #e5f9f6; border: 1px solid #355e56; }
+        [data-theme="dark"] .example-btn:hover { border-color: rgba(6,190,182,.35); box-shadow: 0 6px 12px rgba(0,0,0,.35); }
+        [data-theme="dark"] .latex-preview { background: #0f1b19; border: 1px solid #24433d; color: #e5e7eb; }
+        [data-theme="dark"] .text-muted { color: #9fb2af !important; }
+        [data-theme="dark"] .form-control::placeholder { color: #b9c8c5; }
+        [data-theme="dark"] .btn-outline-secondary { color: #d2ece8; border-color: #355e56; }
+        [data-theme="dark"] .btn-outline-secondary:hover { background: #1f3d38; color: #e5f9f6; border-color: #4fb8ac; }
+        [data-theme="dark"] .btn-outline-primary { color: #d2ece8; border-color: #3d7f77; }
+        [data-theme="dark"] .btn-outline-primary:hover { background: #22524d; color: #e5f9f6; border-color: #48b1bf; }
+    </style>
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function $(id){ return document.getElementById(id); }
+        function updateThemeIcon(){ const icon = $('themeIcon'); if(!icon) return; const isDark = document.documentElement.getAttribute('data-theme') === 'dark'; icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon'; }
+        function toggleTheme(){ const isDark = document.documentElement.getAttribute('data-theme') === 'dark'; const next = isDark ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', next); try { localStorage.setItem('theme', next); } catch(_){} updateThemeIcon(); }
+        function addFade(el){ if(!el) return; el.classList.remove('fade-in'); void el.offsetWidth; el.classList.add('fade-in'); setTimeout(()=>{ el.classList.remove('fade-in'); }, 260); }
+        function switchMode(mode) {
+            const expr = $('mode-expr'); const coeff = $('mode-coeff'); const tExpr = $('tab-expr'); const tCoeff = $('tab-coeff');
+            if (mode === 'expr') { expr.style.display = ''; coeff.style.display = 'none'; tExpr.classList.add('active'); tCoeff.classList.remove('active'); }
+            else { expr.style.display = 'none'; coeff.style.display = ''; tExpr.classList.remove('active'); tCoeff.classList.add('active'); }
+            onInputChange();
+        }
+        function normalizeExpr(s) { if (!s) return ''; return s.replace(/S/g,'s').replace(/[\u00B2]/g,'^2').replace(/[\u00B3]/g,'^3').replace(/\s+/g,'').replace(/−/g,'-').replace(/·/g,'*'); }
+        function parsePolynomial(expr) {
+            let t = normalizeExpr(expr); if (!t) return [0]; if (!/[sS]/.test(t) && t.includes(',')) return t.split(',').map(x => parseFloat(x.trim()) || 0);
+            t = t.replace(/-/g, '+-'); if (t[0] === '+') t = t.slice(1);
+            const tokens = t.split('+').map(x => x.trim()).filter(Boolean); const degreeToCoeff = new Map(); let any = false;
+            for (let tok of tokens) { if (tok === '' || tok === '+' || tok === '-') continue; any = true; let sign = 1; if (tok[0] === '-') { sign = -1; tok = tok.slice(1); }
+                if (tok.includes('s')) { const parts = tok.split('s'); const coeffStr = parts[0]; const expStr = parts[1] && parts[1].startsWith('^') ? parts[1].slice(1) : ''; const coeff = coeffStr ? parseFloat(coeffStr) : 1; const exp = expStr ? parseInt(expStr) : 1; const val = sign * (isNaN(coeff) ? 1 : coeff); degreeToCoeff.set(exp, (degreeToCoeff.get(exp) || 0) + val);
+                } else { const val = sign * (parseFloat(tok) || 0); degreeToCoeff.set(0, (degreeToCoeff.get(0) || 0) + val); } }
+            if (!any) return [0]; const maxDeg = Math.max(0, ...degreeToCoeff.keys()); const arr = Array.from({ length: maxDeg + 1 }, (_, k) => +((degreeToCoeff.get(k) || 0)));
+            let last = arr.length - 1; while (last > 0 && Math.abs(arr[last]) === 0) last--; return arr.slice(0, last + 1);
+        }
+        function toLatexPolynomial(coeffs){ const zero = coeffs.every(x=>x===0); if (zero) return '0'; const parts=[]; for(let k=coeffs.length-1;k>=0;k--){const c=coeffs[k]; if(!c) continue; const sign=c<0?' - ':(parts.length?' + ':''); const absC=Math.abs(c); let term=''; if(k===0){term=absC.toString();} else if(k===1){term=(absC===1?'':absC.toString())+'s';} else {term=(absC===1?'':absC.toString())+'s^{'+k+'}';} parts.push((parts.length?sign:(c<0?'-':''))+term);} return parts.join('')||'0'; }
+
+        // Coefficient table helpers
+        function renderRows(kind, deg, values){
+            const container = kind==='num' ? $('numCoeffRows') : $('denCoeffRows');
+            container.innerHTML = '';
+            for (let k = deg; k >= 0; k--) {
+                const row = document.createElement('div'); row.className='coeff-row';
+                const left = document.createElement('div'); left.className='left';
+                const label = document.createElement('span'); label.className='text-muted'; label.innerHTML = (kind==='num' ? `a<sub>${k}</sub> =` : `b<sub>${k}</sub> =`);
+                const input = document.createElement('input'); input.type='number'; input.step='any'; input.className='form-control form-control-sm coefficient-input'; input.dataset.degree = String(k); input.value = (values && values[k] != null) ? values[k] : (k===0 && kind==='num' ? 1 : (k===1 && kind==='num' ? 1 : (k===1 && kind==='den' ? 1 : 0)));
+                input.addEventListener('input', onInputChange);
+                left.appendChild(label); left.appendChild(input);
+                const right = document.createElement('div'); right.className='right'; right.innerHTML = (k===0? '1' : (k===1? 's' : 's<sup>'+k+'</sup>'));
+                row.appendChild(left); row.appendChild(right);
+                container.appendChild(row);
+            }
+        }
+        function getDegree(kind){ const container = kind==='num' ? $('numCoeffRows') : $('denCoeffRows'); const inputs = container.querySelectorAll('input[data-degree]'); let max=-1; inputs.forEach(el=>{ const k=parseInt(el.dataset.degree); if(k>max) max=k; }); return Math.max(0, max); }
+        function setDegree(kind, newDeg){ const deg = Math.max(0, parseInt(newDeg)||0); const vals = readRows(kind); renderRows(kind, deg, vals); const inp = kind==='num' ? $('numDegreeInput') : $('denDegreeInput'); if (inp) inp.value = String(deg); onInputChange(); }
+        function incDegree(kind, delta){ const cur = getDegree(kind); setDegree(kind, cur + delta); }
+        function readRows(kind){ const container = kind==='num' ? $('numCoeffRows') : $('denCoeffRows'); const inputs = container.querySelectorAll('input[data-degree]'); const arr = []; inputs.forEach(el => { const k = parseInt(el.dataset.degree); arr[k] = parseFloat(el.value) || 0; }); let last = arr.length-1; while(last>0 && Math.abs(arr[last])===0) last--; return arr.slice(0,last+1); }
+        function pasteCoeffList(kind){ const src = kind==='num' ? $('numCoeffList') : $('denCoeffList'); const list = (src.value||'').split(',').map(x=>parseFloat(x.trim())||0); const deg = Math.max(0, list.length-1); const inp = kind==='num' ? $('numDegreeInput') : $('denDegreeInput'); inp.value = String(deg); renderRows(kind, deg, list); onInputChange(); }
+        function trimTrailingZeros(kind){ const arr = readRows(kind); const deg = Math.max(0, arr.length-1); const inp = kind==='num' ? $('numDegreeInput') : $('denDegreeInput'); inp.value = String(deg); renderRows(kind, deg, arr); onInputChange(); }
+
+        // Sync coefficient editor from expression values (trims trailing zeros)
+        function syncCoeffFromExpr(){
+            const numArr = parsePolynomial($('numExpr').value);
+            const denArr = parsePolynomial($('denExpr').value);
+            const ndeg = Math.max(0, numArr.length - 1);
+            const ddeg = Math.max(0, denArr.length - 1);
+            const nInput = $('numDegreeInput'); if (nInput) nInput.value = String(ndeg);
+            const dInput = $('denDegreeInput'); if (dInput) dInput.value = String(ddeg);
+            renderRows('num', ndeg, numArr);
+            renderRows('den', ddeg, denArr);
+        }
+
+        function onInputChange(){
+            const exprVisible = $('mode-expr').style.display !== 'none';
+            let num, den;
+            if (exprVisible){
+                num = parsePolynomial($('numExpr').value);
+                den = parsePolynomial($('denExpr').value);
+            } else { num = readRows('num'); den = readRows('den'); }
+            const latexN=toLatexPolynomial(num), latexD=toLatexPolynomial(den);
+            const el=$('latexH'); if(el){ el.innerHTML='$Z(s)=\\dfrac{N(s)}{D(s)}=\\dfrac{'+latexN+'}{'+latexD+'}$'; if(window.MathJax&&MathJax.typesetPromise) MathJax.typesetPromise([el]).then(()=>addFade(el)); }
+            // Update symbolic N(s), D(s) template with a_k and b_k
+            const sym = $('symbolicTemplate');
+            if (sym) {
+                // Build symbolic template based on selected order, not current numeric values
+                const nDeg = getDegree('num');
+                const dDeg = getDegree('den');
+                const nTerms = []; for (let k=nDeg; k>=0; k--) { if (k===0) nTerms.push(`a_{${k}}`); else if (k===1) nTerms.push(`a_{${k}} s`); else nTerms.push(`a_{${k}} s^{${k}}`); }
+                const dTerms = []; for (let k=dDeg; k>=0; k--) { if (k===0) dTerms.push(`b_{${k}}`); else if (k===1) dTerms.push(`b_{${k}} s`); else dTerms.push(`b_{${k}} s^{${k}}`); }
+                const nLatex = nTerms.length ? nTerms.join(' + ') : '0';
+                const dLatex = dTerms.length ? dTerms.join(' + ') : '0';
+                sym.innerHTML = '$N(s)=' + nLatex + ',\\quad D(s)=' + dLatex + '$';
+                if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([sym]).then(()=>addFade(sym));
+            }
+            return { numerator:num, denominator:den };
+        }
+        function loadExample(type){
+            if($('mode-expr').style.display==='none') switchMode('expr');
+            if(type==='rc'){ $('numExpr').value='s + 1'; $('denExpr').value='s'; }
+            else if(type==='lc'){ $('numExpr').value='s^2 + 4s + 3'; $('denExpr').value='s^2 + 2s'; }
+            else if(type==='simple'){ $('numExpr').value='s'; $('denExpr').value='1'; }
+            // Sync coefficient editor to trimmed forms from example
+            syncCoeffFromExpr();
+            onInputChange();
+        }
+
+        // Utilities: download and copy image with toast feedback
+        function downloadImage(){
+            const img = $('networkImage'); if (!img || !img.src) return;
+            const link = document.createElement('a'); link.download = 'ladder_network.png'; link.href = img.src; link.click();
+        }
+        async function copyImageToClipboard(){
+            try{
+                const img = $('networkImage'); if (!img || !img.src) throw new Error('No image');
+                const res = await fetch(img.src);
+                const blob = await res.blob();
+                await navigator.clipboard.write([ new ClipboardItem({ [blob.type]: blob }) ]);
+                showToast('Copied image to clipboard');
+            }catch(err){
+                console.error('Copy failed', err);
+                showToast('Copy failed. Try Download instead.', true);
+            }
+        }
+        function showToast(message, isError){
+            const el = $('copyToast'); if(!el) return alert(message);
+            const body = el.querySelector('.toast-body'); if(body) body.textContent = message;
+            if (isError) { el.classList.remove('text-bg-success'); el.classList.add('text-bg-danger'); }
+            else { el.classList.remove('text-bg-danger'); el.classList.add('text-bg-success'); }
+            const toast = bootstrap.Toast.getOrCreateInstance(el, { delay: 1600 });
+            toast.show();
+        }
+        async function processTransferFunction(){ const resultsSection = $('resultsSection'); const errorMessage = $('errorMessage'); const successMessage = $('successMessage'); const loading = $('loading'); const zArray=$('zArray'); const yArray=$('yArray'); const networkImage=$('networkImage'); const genBtn=$('generateBtn'); const originalBtnHTML = genBtn ? genBtn.innerHTML : ''; if(genBtn){ genBtn.disabled=true; genBtn.innerHTML='<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Generating...'; }
+            resultsSection.style.display='none'; errorMessage.style.display='none'; successMessage.style.display='none'; loading.style.display='block';
+            try{ const { numerator, denominator } = onInputChange(); if(numerator.every(x=>x===0)) throw new Error('Numerator cannot be zero'); if(denominator.every(x=>x===0)) throw new Error('Denominator cannot be zero'); const resp = await fetch('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numerator,denominator})}); const data = await resp.json(); if(!resp.ok) throw new Error(data.error||'Unknown error'); zArray.textContent = data.Z.length?data.Z.join(', '):'None'; yArray.textContent = data.Y.length?data.Y.join(', '):'None'; const resEl=$('resultLatexH'); if(resEl){ const { numerator:nn, denominator:dd } = onInputChange(); resEl.innerHTML='$H(s)=\\dfrac{'+toLatexPolynomial(nn)+'}{'+toLatexPolynomial(dd)+'}$'; if(window.MathJax&&MathJax.typesetPromise) await MathJax.typesetPromise([resEl]); addFade(resEl); } if(data.image) networkImage.src='data:image/png;base64,'+data.image; resultsSection.style.display='block'; successMessage.textContent='Network generated successfully!'; successMessage.style.display='block'; } catch(err){ errorMessage.textContent=err.message; errorMessage.style.display='block'; } finally{ loading.style.display='none'; if(genBtn){ genBtn.disabled=false; genBtn.innerHTML=originalBtnHTML; } } }
+        document.addEventListener('DOMContentLoaded', function(){
+            switchMode('expr');
+            // initialize coefficient tables with defaults
+            $('numDegreeInput').value = '1'; renderRows('num', 1, [1,1]);
+            $('denDegreeInput').value = '1'; renderRows('den', 1, [0,1]);
+            ['numExpr','denExpr'].forEach(id=>{ const el=$(id); if(el) el.addEventListener('input', function(){ syncCoeffFromExpr(); onInputChange(); }); });
+            ;['numCoeffList','denCoeffList','numDegreeInput','denDegreeInput'].forEach(id=>{ const el=$(id); if(el) el.addEventListener('input', onInputChange); });
+            onInputChange();
+            // theme toggle & tooltips
+            const tgl=document.getElementById('themeToggle'); if(tgl) tgl.addEventListener('click', toggleTheme); updateThemeIcon();
+            if (window.bootstrap){ const triggers=[].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]')); triggers.forEach(function (el){ new bootstrap.Tooltip(el); }); }
+        });
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="main-container">
+            <div class="header">
+                <h1><i class="fas fa-project-diagram"></i> Driving-Point Impedance Synthesizer</h1>
+                <button id="themeToggle" class="btn btn-sm btn-outline-secondary theme-toggle" type="button" title="Toggle dark mode" data-bs-toggle="tooltip" data-bs-placement="left"><i id="themeIcon" class="fas fa-moon"></i></button>
+                <p>Made by <strong>Sarvik</strong> — convert driving-point impedances Z(s) to electrical networks</p>
+            </div>
+            <div class="input-section">
+                <h3><i class="fas fa-calculator"></i> Driving-Point Impedance Input</h3>
+                <p class="text-muted">Enter H(s) as expressions or use the coefficient editor.</p>
+                <div class="pill-tabs" role="tablist">
+                    <button id="tab-expr" class="active" onclick="switchMode('expr')">Expression</button>
+                    <button id="tab-coeff" onclick="switchMode('coeff')">Polynomial Coefficients</button>
+                </div>
+                <div id="mode-expr">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="polynomial-input">
+                                <h6 class="mb-2"><i class="fas fa-arrow-up"></i> Numerator N(s)</h6>
+                                <input type="text" id="numExpr" class="form-control coefficient-input" placeholder="e.g., s^2 + 4s + 3" value="s + 1">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="polynomial-input">
+                                <h6 class="mb-2"><i class="fas fa-arrow-down"></i> Denominator D(s)</h6>
+                                <input type="text" id="denExpr" class="form-control coefficient-input" placeholder="e.g., s^2 + 2s" value="s">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="mode-coeff" style="display:none;">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="polynomial-input">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <h6 class="mb-0"><i class="fas fa-arrow-up"></i> Numerator N(s)</h6>
+                                    <div class="order-ctrl">
+                                        <small class="text-muted">Order</small>
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="incDegree('num',-1)">−</button>
+                                        <input type="number" id="numDegreeInput" class="form-control form-control-sm degree-input" min="0" step="1" value="1" oninput="setDegree('num', this.value)">
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="incDegree('num',1)">+</button>
+                                    </div>
+                                </div>
+                                <div id="numCoeffRows" class="coeff-table mt-2"></div>
+                                <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                                    <input type="text" id="numCoeffList" class="form-control form-control-sm" placeholder="Paste: a0, a1, a2, ..." style="max-width: 260px;">
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="pasteCoeffList('num')"><i class="fas fa-paste"></i></button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="trimTrailingZeros('num')"><i class="fas fa-cut"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="polynomial-input">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <h6 class="mb-0"><i class="fas fa-arrow-down"></i> Denominator D(s)</h6>
+                                    <div class="order-ctrl">
+                                        <small class="text-muted">Order</small>
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="incDegree('den',-1)">−</button>
+                                        <input type="number" id="denDegreeInput" class="form-control form-control-sm degree-input" min="0" step="1" value="1" oninput="setDegree('den', this.value)">
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="incDegree('den',1)">+</button>
+                                    </div>
+                                </div>
+                                <div id="denCoeffRows" class="coeff-table mt-2"></div>
+                                <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                                    <input type="text" id="denCoeffList" class="form-control form-control-sm" placeholder="Paste: b0, b1, b2, ..." style="max-width: 260px;">
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="pasteCoeffList('den')"><i class="fas fa-paste"></i></button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="trimTrailingZeros('den')"><i class="fas fa-cut"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="latex-preview mt-3">
+                    <div id="latexH">$Z(s)=\\dfrac{N(s)}{D(s)}=\\dfrac{s+1}{s}$</div>
+                    <div id="symbolicTemplate" class="mt-1"></div>
+                    <small class="text-muted">Tip: In Expression tab, type N(s) and D(s). In Polynomial Coefficients, enter ascending powers a0, a1, …</small>
+                </div>
+                <div class="example-section mt-3">
+                    <h6 class="mb-2"><i class="fas fa-lightbulb"></i> Quick Examples</h6>
+                    <button class="example-btn" onclick="loadExample('rc')">RC: (s+1)/s</button>
+                    <button class="example-btn" onclick="loadExample('lc')">LC: (s^2+4s+3)/(s^2+2s)</button>
+                    <button class="example-btn" onclick="loadExample('simple')">Simple: s/1</button>
+                </div>
+                <div class="text-center mt-3">
+                    <button id="generateBtn" class="btn btn-primary btn-lg" onclick="processTransferFunction()" title="Synthesize ladder network" data-bs-toggle="tooltip"><i class="fas fa-cogs"></i> Generate Network</button>
+                </div>
+            </div>
+            <div class="loading" id="loading">
+                <div class="spinner-border" role="status"><span class="visually-hidden">Processing...</span></div>
+                <p class="mt-2">Processing transfer function...</p>
+            </div>
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+            <div id="successMessage" class="success-message" style="display: none;"></div>
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <h3><i class="fas fa-network-wired"></i> Generated Ladder Network</h3>
+                <div class="latex-preview mb-3"><div id="resultLatexH"></div></div>
+                <div class="network-data">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-resistor"></i> Series Impedances (Z)</h6>
+                            <div id="zArray" class="alert alert-info"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-bolt"></i> Shunt Admittances (Y)</h6>
+                            <div id="yArray" class="alert alert-warning"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-center">
+                    <h5><i class="fas fa-image"></i> Network Schematic</h5>
+                    <div class="network-image-container" style="background: white; border-radius: 10px; padding: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        <img id="networkImage" class="network-image" alt="Generated ladder network" style="max-width: 100%; height: auto; border-radius: 8px;">
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-outline-primary btn-sm" onclick="downloadImage()" title="Download PNG" data-bs-toggle="tooltip"><i class="fas fa-download"></i> Download Image</button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="copyImageToClipboard()" title="Copy to clipboard" data-bs-toggle="tooltip"><i class="fas fa-copy"></i> Copy Image</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="footer"><p>&copy; 2024–2025 Network Ladder — Made by Sarvik.</p></div>
+    </div>
+    <!-- Toast for feedback -->
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+        <div id="copyToast" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">Copied.</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+

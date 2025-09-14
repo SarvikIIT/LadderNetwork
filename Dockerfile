@@ -10,30 +10,34 @@ RUN apt-get update && apt-get install -y \
 
 # Copy source files
 WORKDIR /app
-COPY *.cpp *.hpp CMakeLists.txt ./
+COPY src/*.cpp src/*.hpp ./src/
+COPY CMakeLists.txt ./
 
 # Build the C++ application
-RUN g++ -std=c++17 -O2 -o app main.cpp Polynomial.cpp ContinuedFraction.cpp CSVMaker.cpp NetworkUtils.cpp
+RUN g++ -std=c++17 -O2 -o app \
+    src/main.cpp src/Polynomial.cpp src/ContinuedFraction.cpp src/CSVMaker.cpp src/NetworkUtils.cpp
 
 # Python runtime stage
 FROM python:3.11-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
 # Copy Python requirements and install dependencies
-COPY requirements.txt .
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the built C++ application and Python files
 COPY --from=builder /app/app ./
-COPY *.py ./
-COPY *.html ./
+COPY web ./web
+COPY templates ./templates
+COPY wsgi.py ./
+COPY requirements.txt ./
 
 # Create a non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
@@ -47,4 +51,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/api/health || exit 1
 
 # Run the application
-CMD ["python", "app.py"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "wsgi:app"]

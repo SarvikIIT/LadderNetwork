@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import json
 import re
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 import matplotlib
 matplotlib.use('Agg')
@@ -18,7 +18,7 @@ import schemdraw.elements as elm
 from io import BytesIO
 import base64
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), '..', 'templates'), static_folder=os.path.join(os.path.dirname(__file__), '..', 'static'))
 CORS(app)
 
 # Configuration
@@ -61,9 +61,66 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
         if all(x == 0 for x in denominator_coeffs):
             return None, "Invalid network: Denominator cannot be zero"
         
+        # Normalize by trimming trailing zeros to get actual degrees
+        def trim_trailing_zeros(arr):
+            i = len(arr) - 1
+            while i > 0 and abs(arr[i]) == 0:
+                i -= 1
+            return arr[: i + 1]
+
+        numerator_coeffs = trim_trailing_zeros(list(numerator_coeffs))
+        denominator_coeffs = trim_trailing_zeros(list(denominator_coeffs))
+
         # Check for invalid network conditions
         if len(numerator_coeffs) > len(denominator_coeffs) + 1:
             return None, "Invalid network: Numerator degree too high for ladder synthesis"
+
+        # Shortcut trivial forms without invoking C++
+        # Handle constants and single-term cases robustly
+        deg_n = len(numerator_coeffs) - 1
+        deg_d = len(denominator_coeffs) - 1
+
+        def is_zero_poly(poly):
+            return all(abs(x) == 0 for x in poly)
+
+        def safe_div(a, b):
+            try:
+                return a / b
+            except Exception:
+                return None
+
+        if not is_zero_poly(denominator_coeffs):
+            a0 = numerator_coeffs[0] if len(numerator_coeffs) > 0 else 0
+            a1 = numerator_coeffs[1] if len(numerator_coeffs) > 1 else 0
+            b0 = denominator_coeffs[0] if len(denominator_coeffs) > 0 else 0
+            b1 = denominator_coeffs[1] if len(denominator_coeffs) > 1 else 0
+
+            # H(s) = (a1 s + a0) / (b1 s + b0)
+            # Constant: a1=0, b1=0 -> Z = [k]
+            if deg_n <= 1 and deg_d <= 1:
+                if abs(a1) == 0 and abs(b1) == 0 and abs(b0) > 0:
+                    k = safe_div(a0, b0)
+                    if k is not None:
+                        return {"Z": [f"{k}"], "Y": []}, None
+                # Pure integrator: a0>0, b1>0, a1=0, b0=0 -> Z = [(a0/b1)/s]
+                if abs(a1) == 0 and abs(b0) == 0 and abs(b1) > 0:
+                    scale = safe_div(a0, b1)
+                    if scale is None:
+                        scale = 0
+                    # If scale == 1: token '1/s', else 'scale/s'
+                    if abs(scale - 1) < 1e-12:
+                        return {"Z": ["1/s"], "Y": []}, None
+                    else:
+                        return {"Z": [f"{scale}/s"], "Y": []}, None
+                # Pure differentiator: a1>0, b0>0, a0=0, b1=0 -> Z = [s/(b0/a1)]
+                if abs(b1) == 0 and abs(a0) == 0 and abs(b0) > 0 and abs(a1) > 0:
+                    scale = safe_div(b0, a1)
+                    if scale is None:
+                        scale = 0
+                    if abs(scale - 1) < 1e-12:
+                        return {"Z": ["s"], "Y": []}, None
+                    else:
+                        return {"Z": [f"s/{scale}"], "Y": []}, None
         
         # Create temporary input file
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
@@ -134,8 +191,13 @@ def parse_transfer_function(numerator_coeffs, denominator_coeffs):
             if y_content.strip():
                 y_array = [item.strip() for item in y_content.split(',')]
         
-        # Validate that we have at least one element
+        # Validate that we have at least one element; fallback for trivial unity if needed
         if not z_array and not y_array:
+            # As a last resort, attempt to interpret H(s) as a constant ratio
+            if deg_n == 0 and deg_d == 0 and abs(denominator_coeffs[0]) > 0:
+                k = safe_div(numerator_coeffs[0], denominator_coeffs[0])
+                if k is not None:
+                    return {"Z": [f"{k}"], "Y": []}, None
             return None, "Invalid network: No valid network elements generated"
         
         return {"Z": z_array, "Y": y_array}, None
@@ -246,8 +308,11 @@ def generate_network_image(z_array, y_array):
             z = str(z_array[i]).strip()
             parsed_z = parse_as_plus_b(z)
             # Series element(s) on the top rail (impedance mapping)
-            if z == '1':
-                node = d.add(elm.Inductor().right().at(node).length(SERIES_LEN).label('1H', loc='bottom')).end
+            # Pure numeric constant -> series resistor
+            if re.fullmatch(r'\d+(?:\.\d+)?', z):
+                node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label(f'{dec(float(z))}Ω', loc='bottom')).end
+            elif z == '1':
+                node = d.add(elm.Resistor().right().at(node).length(SERIES_LEN).label('1Ω', loc='bottom')).end
             elif z == 's':
                 node = d.add(elm.Inductor().right().at(node).length(SERIES_LEN).label('1H', loc='bottom')).end
             elif z == '1/s':
@@ -483,8 +548,7 @@ def health_check():
 @app.route('/', methods=['GET'])
 def serve_frontend():
     """Serve the main frontend page"""
-    index_path = os.path.join(os.path.dirname(__file__), 'index.html')
-    return send_file(index_path)
+    return render_template('index.html')
 
 if __name__ == '__main__':
     # Compile C++ application on startup

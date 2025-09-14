@@ -17,3 +17,4 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    command: ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "wsgi:app"]
